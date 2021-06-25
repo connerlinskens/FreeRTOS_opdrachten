@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,72 +10,77 @@
 #include "freertos/timers.h"
 #include "freertos/semphr.h"
 
-#define NUM_OF_PHILOSOPHERS 5
-#define MAX_NUMBER_ALLOWED (NUM_OF_PHILOSOPHERS - 1)
-#define left(i) (i)
-#define right(i) ((i + 1) % NUM_OF_PHILOSOPHERS)
 
-SemaphoreHandle_t forks[NUM_OF_PHILOSOPHERS];
-SemaphoreHandle_t philosophers_sem;
-TaskHandle_t philosophers[NUM_OF_PHILOSOPHERS];
+SemaphoreHandle_t writing;
+SemaphoreHandle_t reading;
+static int readCount = 0;
+static char text[10];
 
-void think_task(void *pvParameter);
-
-void take_fork(int i){
-    TaskHandle_t think_task_handle = NULL;
-    xTaskCreate(think_task, "think_task", 2048, &i, 2, &think_task_handle);
-
-    xSemaphoreTake(forks[left(i)], portMAX_DELAY);
-    xSemaphoreTake(forks[right(i)], portMAX_DELAY);
-
-    vTaskDelete(think_task_handle);
-}
-
-void return_fork(int i){
-    xSemaphoreGive(forks[left(i)]);
-    xSemaphoreGive(forks[right(i)]);
-    printf("Philosopher %d puts fork %d and %d back\n", i, left(i), right(i));
-}
-
-void think_task(void *pvParameter)
-{
-    int i = *(int *) pvParameter;
-    while(1){
-        printf("Philospher %d is thinking\n", i);
-        vTaskDelay(500);
-    }
-}
-
-void philosophers_task(void *pvParameter){
+void writer(void *pvParameter){
     int i = *(int *)pvParameter;
+    vTaskDelay(10);
+
+    char wr_text[10];
+    sprintf(wr_text, "%d", i);
+
     while(true){
-        xSemaphoreTake(philosophers_sem, portMAX_DELAY);
+        xSemaphoreTake(writing, portMAX_DELAY);
 
-        take_fork(i);
-        printf("Philosopher %d is eating\n", i);
-        vTaskDelay(100 / portTICK_RATE_MS);
-        return_fork(i);
+        printf("Writer %d is writing\n", i);
+        strcpy(text, wr_text);
 
-        xSemaphoreGive(philosophers_sem);
-        vTaskDelay(100 / portTICK_RATE_MS);
+        xSemaphoreGive(writing);
+        vTaskDelay(100);
     }
 }
+
+void reader(void *pvParameter){
+    while(true){
+        // Lock readCount
+        xSemaphoreTake(reading, portMAX_DELAY);
+        readCount++;
+
+        // Block writers
+        if(readCount == 1)
+            xSemaphoreTake(writing, portMAX_DELAY);
+
+        // Unlock readCount
+        xSemaphoreGive(reading);
+
+        printf("Reader read: %s\n", text);
+
+        // Lock readCount
+        xSemaphoreTake(reading, portMAX_DELAY);
+        readCount--;
+
+        // Unblock writers
+        if(readCount == 0)
+            xSemaphoreGive(writing);
+
+        // Unlock readCount
+        xSemaphoreGive(reading);
+        vTaskDelay(100);
+    }
+}
+
+
 
 void app_main()
 {
-    int param[NUM_OF_PHILOSOPHERS];
+    // Init semaphores
+    writing = xSemaphoreCreateBinary();
+    xSemaphoreGive(writing);
+    reading = xSemaphoreCreateBinary();
+    xSemaphoreGive(reading);
 
-    for(int i = 0; i < NUM_OF_PHILOSOPHERS; i++){
-        forks[i] = xSemaphoreCreateMutex();
+    // Start reading and writing tasks
+    for(int i = 0; i < 3; i++){
+        xTaskCreate(writer, "writer", 2048, &(i), 5, NULL);
     }
 
-    philosophers_sem = xSemaphoreCreateCounting(MAX_NUMBER_ALLOWED, MAX_NUMBER_ALLOWED);
-
-    for(int i = 0; i < NUM_OF_PHILOSOPHERS; i++){
-        param[i] = i;
-        xTaskCreate(philosophers_task, "philisophers_task", 2048, &param[i], 2, NULL);
+    for(int i = 0; i < 3; i++){
+        xTaskCreate(reader, "reader", 2048, NULL, 5, NULL);
     }
+
     nvs_flash_init();
-
-
 }
