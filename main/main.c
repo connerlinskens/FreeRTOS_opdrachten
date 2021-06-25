@@ -9,7 +9,6 @@
 #include "freertos/timers.h"
 #include "freertos/semphr.h"
 
-<<<<<<< HEAD
 #define NUM_OF_PHILOSOPHERS 5
 #define MAX_NUMBER_ALLOWED (NUM_OF_PHILOSOPHERS - 1)
 #define left(i) (i)
@@ -58,15 +57,6 @@ void philosophers_task(void *pvParameter){
 
         xSemaphoreGive(philosophers_sem);
         vTaskDelay(100 / portTICK_RATE_MS);
-=======
-void task(void *pvParameter)
-{
-    int i = *(int *)pvParameter;
-    
-    while(true){
-        printf("Task  %d\n", i);
-        vTaskDelay(1 / portTICK_PERIOD_MS);
->>>>>>> Week_2_opdr_3
     }
 }
 
@@ -85,14 +75,6 @@ void app_main()
         xTaskCreate(philosophers_task, "philisophers_task", 2048, &param[i], 2, NULL);
     }
     nvs_flash_init();
-<<<<<<< HEAD
 
 
-=======
-    // Starting tasks dynamicly
-    for (int i = 0; i < 20; i++)
-    {
-        xTaskCreate(&task, "task", 2048, &i, 5, NULL);
-    }
->>>>>>> Week_2_opdr_3
 }
