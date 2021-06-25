@@ -12,29 +12,51 @@
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
- 
-static int priority = 5;
-xTaskHandle timer_task_handle;
 
-void timer_task(void *pvParameter)
+#define RED_LED 4
+#define GREEN_LED 2
+
+void periodicTask_Red(void *pvParameter)
 {
-    while(true){
-        vTaskDelay(3000 / portTICK_RATE_MS);
-        printf("Weer 3 seconden\n");
-        vTaskDelay(3000 / portTICK_RATE_MS);
-        printf("Weer 3 seconden\n");
-        priority--;
-    
-        if(priority == 1){
-            vTaskDelete(timer_task_handle);
-        } else {
-            vTaskPrioritySet(timer_task_handle, priority);
-        }
+    int state = 0;
+
+    gpio_pad_select_gpio(RED_LED);
+    gpio_set_direction(RED_LED, GPIO_MODE_OUTPUT);
+    gpio_set_level(RED_LED, state);
+
+    portTickType xLastWakeTime;
+
+    xLastWakeTime = xTaskGetTickCount();
+
+    for(;;){
+        state = state == 0? 1 : 0;
+        gpio_set_level(RED_LED, state);
+        vTaskDelayUntil(&xLastWakeTime, (1000 / portTICK_RATE_MS));
+    }
+}
+
+void periodicTask_Green(void *pvParameter)
+{
+    int state = 0;
+
+    gpio_pad_select_gpio(GREEN_LED);
+    gpio_set_direction(GREEN_LED, GPIO_MODE_OUTPUT);
+    gpio_set_level(GREEN_LED, state);
+
+    portTickType xLastWakeTime;
+
+    xLastWakeTime = xTaskGetTickCount();
+
+    for(;;){
+        state = state == 0? 1 : 0;
+        gpio_set_level(GREEN_LED, state);
+        vTaskDelayUntil(&xLastWakeTime, (200 / portTICK_RATE_MS));
     }
 }
  
 void app_main()
 {
     nvs_flash_init();
-    xTaskCreate(&timer_task, "timer_task", 2048, NULL, 5, timer_task_handle);
+    xTaskCreate(&periodicTask_Red, "periodicTask_Red", 2048, NULL, 5, NULL);
+    xTaskCreate(&periodicTask_Green, "periodicTask_Green", 2048, NULL, 5, NULL);
 }
