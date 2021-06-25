@@ -10,77 +10,102 @@
 #include "freertos/timers.h"
 #include "freertos/semphr.h"
 
+typedef struct queue
+{
+    char *data;
+    struct queue *next;
+} Queue;
 
-SemaphoreHandle_t writing;
-SemaphoreHandle_t reading;
-static int readCount = 0;
-static char text[10];
+Queue* queue;
+int bufferSize = 10;
+int items = 0;
+SemaphoreHandle_t queue_sem;
 
-void writer(void *pvParameter){
+char* queue_front(Queue **q)
+{
+        if (*q == NULL)
+                return NULL;
+        
+        // Store the head and data of the head of the queue
+        Queue *first = *q;
+        char *data = first->data;
+
+        // Set the head of the queue to the second in the queue
+        (*q) = (*q)->next;
+        // Remove the head of the queue from the memory
+        free(first);
+
+        return data;
+}
+
+void queue_enqueue(Queue **q , char *data)
+{
+        // Create a new node for the queue
+        Queue *newNode = (Queue*) malloc(sizeof(Queue));
+        Queue *last = *q;
+
+        // Initialise the new node
+        newNode->data = data;
+        newNode->next = NULL;
+
+        // If the queue is empty, set the new node as the head
+        if (*q == NULL)
+        {
+                *q = newNode;
+                return;
+        }
+
+        // Iterate through the list until the last node in the queue
+        while (last->next != NULL)
+                last = last->next;
+        
+        // Set the next for the last node as the new node
+        last->next = newNode;
+}
+
+void consumer_task(void *pvParameter){
     int i = *(int *)pvParameter;
-    vTaskDelay(10);
-
-    char wr_text[10];
-    sprintf(wr_text, "%d", i);
 
     while(true){
-        xSemaphoreTake(writing, portMAX_DELAY);
-
-        printf("Writer %d is writing\n", i);
-        strcpy(text, wr_text);
-
-        xSemaphoreGive(writing);
+        if(items > 0){
+            xSemaphoreTake(queue_sem, portMAX_DELAY);
+            queue_front(&queue);
+            items--;
+            printf("Consumer %d removed an item, Total items: %d\n", i, items);
+            xSemaphoreGive(queue_sem);
+        }
         vTaskDelay(100);
     }
 }
 
-void reader(void *pvParameter){
+void producer_task(void *pvParameter){
+    int i = *(int *)pvParameter;
+
     while(true){
-        // Lock readCount
-        xSemaphoreTake(reading, portMAX_DELAY);
-        readCount++;
-
-        // Block writers
-        if(readCount == 1)
-            xSemaphoreTake(writing, portMAX_DELAY);
-
-        // Unlock readCount
-        xSemaphoreGive(reading);
-
-        printf("Reader read: %s\n", text);
-
-        // Lock readCount
-        xSemaphoreTake(reading, portMAX_DELAY);
-        readCount--;
-
-        // Unblock writers
-        if(readCount == 0)
-            xSemaphoreGive(writing);
-
-        // Unlock readCount
-        xSemaphoreGive(reading);
+        if(items < bufferSize){
+            xSemaphoreTake(queue_sem, portMAX_DELAY);
+            char* item = "item";
+            queue_enqueue(&queue, item);
+            items++;
+            printf("Producer %d added an item, Total items: %d\n", i, items);
+            xSemaphoreGive(queue_sem);
+        }
         vTaskDelay(100);
     }
 }
-
-
 
 void app_main()
 {
-    // Init semaphores
-    writing = xSemaphoreCreateBinary();
-    xSemaphoreGive(writing);
-    reading = xSemaphoreCreateBinary();
-    xSemaphoreGive(reading);
+    // Init semaphore
+    queue_sem = xSemaphoreCreateMutex();
 
-    // Start reading and writing tasks
-    for(int i = 0; i < 3; i++){
-        xTaskCreate(writer, "writer", 2048, &(i), 5, NULL);
+    for (int i = 0; i < 3; i++) {
+        xTaskCreate(producer_task, "producer_task", 2048, &i, 5, NULL);
     }
 
-    for(int i = 0; i < 3; i++){
-        xTaskCreate(reader, "reader", 2048, NULL, 5, NULL);
+    for (int i = 0; i < 2; i++) {
+        xTaskCreate(consumer_task, "consumer_task", 2048, &i, 5, NULL);
     }
-
+    
     nvs_flash_init();
 }
