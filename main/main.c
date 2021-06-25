@@ -13,38 +13,28 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
  
-#define BLINK_GPIO 13
+static int priority = 5;
+xTaskHandle timer_task_handle;
 
-void hello_task(void *pvParameter)
+void timer_task(void *pvParameter)
 {
- 
-	while(1)
-	{
-	    printf("Hello world!\n");
-	    vTaskDelay(100 / portTICK_RATE_MS);
-	}
-}
- 
-void blinky(void *pvParameter)
-{
- 
-    gpio_pad_select_gpio(BLINK_GPIO);
-    /* Set the GPIO as a push/pull output */
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-    while(1) {
-        /* Blink off (output low) */
-        gpio_set_level(BLINK_GPIO, 0);
-        vTaskDelay(1000 / portTICK_RATE_MS);
-        /* Blink on (output high) */
-        gpio_set_level(BLINK_GPIO, 1);
-        vTaskDelay(1000 / portTICK_RATE_MS);
+    while(true){
+        vTaskDelay(3000 / portTICK_RATE_MS);
+        printf("Weer 3 seconden\n");
+        vTaskDelay(3000 / portTICK_RATE_MS);
+        printf("Weer 3 seconden\n");
+        priority--;
+    
+        if(priority == 1){
+            vTaskDelete(timer_task_handle);
+        } else {
+            vTaskPrioritySet(timer_task_handle, priority);
+        }
     }
 }
- 
  
 void app_main()
 {
     nvs_flash_init();
-    xTaskCreate(&hello_task, "hello_task", 2048, NULL, 5, NULL);
-    xTaskCreate(&blinky, "blinky", 512,NULL,5,NULL );
+    xTaskCreate(&timer_task, "timer_task", 2048, NULL, 5, timer_task_handle);
 }
